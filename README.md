@@ -1,10 +1,57 @@
-# ⚓ Sayay — AI Agent Cost Guardrails
+<p align="center">
+  <img alt="Sayay" src="https://img.shields.io/badge/⚓-Sayay-F59E0B?style=for-the-badge" height="50">
+</p>
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5%2B-3178C6)](https://www.typescriptlang.org)
-[![Zero Deps](https://img.shields.io/badge/dependencies-0-success)](https://github.com/breakingthecloud/sayay)
+<p align="center">
+  <b>AI Agent Cost Guardrails</b><br>
+  Budget enforcement middleware for LLM calls. Prevent runaway AI costs.
+</p>
 
-Budget enforcement middleware for LLM calls. Prevent runaway AI costs with per-user daily/monthly/session budgets or credit systems. Zero dependencies.
+<p align="center">
+  <a href="#quick-start">Quick Start</a>
+  ·
+  <a href="#actions">Actions</a>
+  ·
+  <a href="#storage">Storage</a>
+  ·
+  <a href="#ecosystem">Ecosystem</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-Apache_2.0-F59E0B?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/TypeScript-5.5%2B-3178C6?style=flat-square&logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/dependencies-0-success?style=flat-square" alt="Zero deps">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs">
+</p>
+
+---
+
+## What Is Sayay?
+
+Sayay (Quechua: "to stop/detain") stops your AI costs from running away. Set per-user daily/monthly budgets or credit systems. Before every LLM call, Sayay decides: allow, warn, degrade, or block.
+
+```typescript
+import { SayayGuard, MemoryStorage } from 'sayay';
+
+const guard = new SayayGuard({
+  storage: new MemoryStorage(),
+  budget: { dailyUsd: 5.00, monthlyUsd: 50.00 },
+  onExceeded: 'block',
+  degradeToModel: 'meta-llama/llama-3.3-70b-instruct:free',
+});
+
+// Before LLM call:
+const decision = await guard.check('user-123', 0.003);
+if (decision.action === 'block') {
+  throw new Error(`Budget exceeded: ${decision.reason}`);
+}
+if (decision.action === 'degrade') {
+  // Use decision.suggestedModel instead of expensive model
+}
+
+// After LLM call:
+await guard.record('user-123', 0.0025);
+```
 
 ## Install
 
@@ -24,41 +71,14 @@ const guard = new SayayGuard({
   degradeToModel: 'meta-llama/llama-3.3-70b-instruct:free',
 });
 
-// Before LLM call:
-const decision = await guard.check('user-123', 0.003); // estimated cost
-if (decision.action === 'block') {
-  throw new Error(`Budget exceeded: ${decision.reason}`);
-}
-if (decision.action === 'degrade') {
-  // Use decision.suggestedModel instead of expensive model
-}
-
-// After LLM call:
-await guard.record('user-123', 0.0025); // actual cost
-```
-
-## Credit-Based System
-
-```typescript
-const guard = new SayayGuard({
-  storage: new MemoryStorage(),
-  budget: { credits: 50, creditsPerCall: 1 },
-  onExceeded: 'block',
-  warnThreshold: 80,  // warn at 80% used
-});
-
-// Deducts 1 credit per call
-await guard.record('user-123', 0, 1);
-
-// Check remaining
-const usage = await guard.getUsage('user-123');
-console.log(`Credits used: ${usage.credits}/50`);
+const decision = await guard.check('user-123', 0.003);
+console.log(decision.action); // 'allow' | 'warn' | 'degrade' | 'block'
 ```
 
 ## Actions
 
 | Action | What happens |
-|--------|-------------|
+|--------|--------------|
 | `allow` | Call proceeds normally |
 | `warn` | Call proceeds, but threshold reached (log it) |
 | `degrade` | Call proceeds with cheaper model (`decision.suggestedModel`) |
@@ -73,9 +93,25 @@ console.log(`Credits used: ${usage.credits}/50`);
 
 Configurable via `warnThreshold` and `degradeThreshold`.
 
+## Credit-Based System
+
+```typescript
+const guard = new SayayGuard({
+  storage: new MemoryStorage(),
+  budget: { credits: 50, creditsPerCall: 1 },
+  onExceeded: 'block',
+  warnThreshold: 80,
+});
+
+await guard.record('user-123', 0, 1);
+
+const usage = await guard.getUsage('user-123');
+console.log(`Credits used: ${usage.credits}/50`);
+```
+
 ## Storage Adapters
 
-Sayay needs a storage backend to track usage. Built-in: `MemoryStorage` (for testing).
+Sayay needs a storage backend to track usage. Built-in: `MemoryStorage` (testing).
 
 For production, implement `SayayStorage`:
 
@@ -108,23 +144,31 @@ async function safeLLMCall(userId: string, prompt: string) {
   if (decision.action === 'block') throw new Error(decision.reason);
 
   const result = await router.prompt(prompt);
-  await guard.record(userId, result.usage?.totalTokens ? result.usage.totalTokens * 0.000001 : 0.003);
+  await guard.record(userId, result.usage?.totalTokens || 0.003);
   return result;
 }
 ```
 
-## Name
+## Ecosystem
 
-**Sayay** (Quechua) = "to stop/detain" — stops your AI costs from running away.
-
-## Part of the FinOptix OSS Ecosystem
-
-- 🧭 **Styrr** — LLM Router
-- ⚓ **Sayay** — Agent Cost Guardrails (this package)
-- 🌊 **Tinkuy** — Agentic Framework
-- 👁️ **Qhaway** — Agent Observability
-- 🗺️ **Ñan** — Architecture Graph
+| Package | Role | npm |
+|---------|------|-----|
+| **Sayay** | Cost guardrails (this) | GitHub |
+| **Styrr** | LLM router | `styrr` |
+| **Tinkuy** | Agent framework | `@carloscortezcloud/tinkuy-agent` |
+| **Qhaway** | Agent observability | `@carloscortezcloud/qhaway` |
+| **TideRAG** | Edge RAG pipeline | `@carloscortezcloud/tiderag` |
 
 ## License
 
-Apache 2.0
+Apache 2.0 — see [LICENSE](LICENSE).
+
+---
+
+<p align="center">
+  Built by engineers who got tired of surprise AWS bills.<br>
+  <a href="https://github.com/breakingthecloud/tinkuylabs">Tinkuy Labs</a> · <a href="https://finoptix.dev">finoptix.dev</a>
+</p>
+<p align="center">
+  <sub>Your AI costs should have a stop button. Sayay is that button.</sub>
+</p>
