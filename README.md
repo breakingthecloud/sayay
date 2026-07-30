@@ -1,5 +1,9 @@
 # ⚓ Sayay — AI Agent Cost Guardrails
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5%2B-3178C6)](https://www.typescriptlang.org)
+[![Zero Deps](https://img.shields.io/badge/dependencies-0-success)](https://github.com/breakingthecloud/sayay)
+
 Budget enforcement middleware for LLM calls. Prevent runaway AI costs with per-user daily/monthly/session budgets or credit systems. Zero dependencies.
 
 ## Install
