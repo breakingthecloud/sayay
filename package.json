@@ -1,6 +1,6 @@
 {
   "name": "@carloscortezcloud/sayay-guard",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "AI agent cost guardrails. Budget enforcement per user/session. Block, degrade, or warn before LLM calls exceed limits.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,6 +30,10 @@
     "url": "https://github.com/breakingthecloud/sayay"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1101.0",
+    "@aws-sdk/client-dynamodb": "^3.1101.0",
+    "@aws-sdk/lib-dynamodb": "^3.1101.0",
+    "@types/node": "^26.1.2",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },

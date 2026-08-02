@@ -111,7 +111,7 @@ console.log(`Credits used: ${usage.credits}/50`);
 
 ## Storage Adapters
 
-Sayay needs a storage backend to track usage. Built-in: `MemoryStorage` (testing).
+Sayay needs a storage backend to track usage. Built-in: `MemoryStorage` (testing) and `DynamoStorage` (DynamoDB, optional AWS dependency).
 
 For production, implement `SayayStorage`:
 
@@ -128,6 +128,66 @@ class KVStorage implements SayayStorage {
   }
   async reset(key: string) { await this.kv.delete(key); }
 }
+```
+
+### DynamoStorage (optional)
+
+Real-time token/cost ledger per customer/session in DynamoDB — survives Lambda warm
+starts and is the "Sayay = Cost Guardrail in Lambda + DynamoDB" pattern. Requires
+`@aws-sdk/lib-dynamodb` + `@aws-sdk/client-dynamodb` (lazy-imported, so the package
+keeps zero hard dependencies).
+
+```typescript
+import { SayayGuard, DynamoStorage } from '@carloscortezcloud/sayay-guard';
+
+// Table: partition key `pk` (S), attribute `value` (N), TTL on `ttl` (N)
+const guard = new SayayGuard({
+  storage: new DynamoStorage({ tableName: 'sayay-ledger', region: 'us-east-1' }),
+  budget: { dailyUsd: 10 },
+});
+```
+
+## Step Functions: TokenBudgetExceededException
+
+Use `checkOrThrow()` to raise a native exception when the budget is exhausted.
+In AWS Step Functions, matching `ErrorEquals: ["TokenBudgetExceededException"]`
+in a Catch block instantly jumps to the error handler — stopping the workflow
+before retries rack up more cost.
+
+```typescript
+import { SayayGuard, MemoryStorage } from '@carloscortezcloud/sayay-guard';
+
+const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { dailyUsd: 10 } });
+
+// Throws TokenBudgetExceededException on block; returns decision otherwise
+const decision = await guard.checkOrThrow('user-42', 0.005);
+```
+
+```jsonc
+// ASL snippet
+"Catch": [
+  {
+    "ErrorEquals": ["TokenBudgetExceededException"],
+    "Next": "HandleBudgetExceeded"
+  }
+]
+```
+
+`TokenBudgetExceededException` extends `BudgetExceededError`, so existing
+`instanceof BudgetExceededError` checks keep working (backward compatible).
+
+## CloudWatch observability (optional)
+
+Pass `cloudWatch` in config to emit a metric per decision. Requires
+`@aws-sdk/client-cloudwatch` (lazy-imported). Emits `Decision`, `RemainingBudget`,
+and `UsagePercent` metrics under the `Sayay` namespace (configurable).
+
+```typescript
+const guard = new SayayGuard({
+  storage,
+  budget: { dailyUsd: 10 },
+  cloudWatch: { metricNamespace: 'MyApp', region: 'us-east-1' },
+});
 ```
 
 ## Integration with Styrr
