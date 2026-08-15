@@ -94,6 +94,11 @@ export interface SayayStorage {
   reset(key: string): Promise<void>;
 }
 
+// ─── Qhaway integration ─────────────────────────────────────────────────
+
+export { SayayQhawayPlugin, sayayDecisionMetric } from './qhaway.js';
+export type { SayayQhawaySpan, SayayQhawayStorage, SayayQhawayPluginOptions } from './qhaway.js';
+
 // ─── Errors ─────────────────────────────────────────────────────────────
 
 /**

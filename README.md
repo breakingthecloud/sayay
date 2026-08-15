@@ -190,6 +190,44 @@ const guard = new SayayGuard({
 });
 ```
 
+## Qhaway observability (Sayay → Qhaway)
+
+Pipe every budget decision (allow/warn/degrade/block) into [Qhaway](https://github.com/breakingthecloud/qhaway)
+as a `sayay.check` span. The Qhaway metrics pipeline then exposes
+`qhaway_sayay_decisions_total{action,user}` and the Grafana **"Budget Guardrails"**
+panel visualizes blocks vs degradations vs allows.
+
+```typescript
+import { SayayGuard, MemoryStorage, SayayQhawayPlugin } from '@carloscortezcloud/sayay-guard';
+import { MemoryStorage as QhawayStorage } from '@carloscortezcloud/qhaway';
+
+const qhawayStorage = new QhawayStorage();
+const qhaway = new SayayQhawayPlugin({
+  storage: qhawayStorage,
+  agentId: 'finops-agent',
+  sessionId: 'session-demo-001',
+  budgetKey: 'team-budget',
+});
+
+const guard = new SayayGuard({
+  storage: new MemoryStorage(),
+  budget: { dailyUsd: 10 },
+  onDecision: qhaway.onDecision,
+});
+```
+
+`onDecision` writes a span with `tool_name: "sayay.check"`, `model: "budget-guard"`,
+`cost_usd: 0`, and `metadata: { action, budgetKey, spent, limit, usagePercent, suggestedModel }`.
+A failed write only logs — observability never breaks the guard path.
+
+Works with any Tinkuy agent via its `guard` option (see
+[`examples/README.md`](examples/README.md) for the run guide and
+`examples/sayay-qhaway.ts` for the full wiring):
+
+```typescript
+const agent = new Agent({ router, guard, tools: [...], systemPrompt: '...' });
+```
+
 ## Integration with Styrr
 
 ```typescript
