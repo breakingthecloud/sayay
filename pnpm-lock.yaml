@@ -18,14 +18,14 @@ importers:
         specifier: ^3.1101.0
         version: 3.1101.0(@aws-sdk/client-dynamodb@3.1101.0)
       '@carloscortezcloud/qhaway':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
       '@carloscortezcloud/styrr-llm':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@carloscortezcloud/tinkuy-agent':
         specifier: ^0.8.0
-        version: 0.8.0(@carloscortezcloud/styrr-llm@0.4.0)
+        version: 0.8.0(@carloscortezcloud/styrr-llm@0.6.0)
       '@types/node':
         specifier: ^26.1.2
         version: 26.1.2
@@ -133,11 +133,11 @@ packages:
     resolution: {integrity: sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ==}
     engines: {node: '>=18.0.0'}
 
-  '@carloscortezcloud/qhaway@0.10.0':
-    resolution: {integrity: sha512-5q20zw5LIV4xqh5NeO8/PfsdttVofcnNwlpQJ5YFH8tgXu9o9Ce0bAkD9RxZZLYEiDPr3WBNrCyderUpIc/3Jg==}
+  '@carloscortezcloud/qhaway@0.11.0':
+    resolution: {integrity: sha512-hGwsx+stjAH7MUUzJj0wDmQi7UcxQiixWQlKH++YumDIiK41NvTxXKvuwrNMzA3wXQzEmPdY/0K6uaEhf+bV5A==}
 
-  '@carloscortezcloud/styrr-llm@0.4.0':
-    resolution: {integrity: sha512-w8a1EYqBy0iUddAN/tK/97YBpEj7XJ7Fl7ZqWNz0+QCwTLuNrPRVeH9kDcmpMxAWtO/J8eJf2EqqS6BGz84ZOg==}
+  '@carloscortezcloud/styrr-llm@0.6.0':
+    resolution: {integrity: sha512-fCV4w5Q1oHlD+o+a2+oudtj5YwPZeAKStMizNp2G0opIofOBqarOYEw2xJuSeBwXctissSAvsMXhDgREkrZPvg==}
 
   '@carloscortezcloud/tinkuy-agent@0.8.0':
     resolution: {integrity: sha512-JVkV6jazta0dMKKf6zPdQTlP9orviP8oiD44NtqCiX1IYUYHZ1P6z8hQOSoZlq6aGpYw1wYzgScgrMjTJMDmYw==}
@@ -1060,15 +1060,15 @@ snapshots:
 
   '@aws/lambda-invoke-store@0.3.0': {}
 
-  '@carloscortezcloud/qhaway@0.10.0': {}
+  '@carloscortezcloud/qhaway@0.11.0': {}
 
-  '@carloscortezcloud/styrr-llm@0.4.0': {}
+  '@carloscortezcloud/styrr-llm@0.6.0': {}
 
-  '@carloscortezcloud/tinkuy-agent@0.8.0(@carloscortezcloud/styrr-llm@0.4.0)':
+  '@carloscortezcloud/tinkuy-agent@0.8.0(@carloscortezcloud/styrr-llm@0.6.0)':
     dependencies:
       yaml: 2.9.0
     optionalDependencies:
-      '@carloscortezcloud/styrr-llm': 0.4.0
+      '@carloscortezcloud/styrr-llm': 0.6.0
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
