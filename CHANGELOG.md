@@ -3,7 +3,7 @@
 > Historial público de releases de [`@carloscortezcloud/sayay-guard`](https://www.npmjs.com/package/@carloscortezcloud/sayay-guard) (npm) y `sayay` (PyPI) — 1 entrada por versión.
 > Repo: https://github.com/breakingthecloud/sayay · Python: `sayay` · Ejemplos: `examples/` + `python/examples/`
 
-Última actualización: **2026-08-25** · `v0.1.0` → `v0.3.0` (+ `v0.1.0-py`) · Verificado `git tag` + `npm view` + `PyPI`.
+Última actualización: **2026-09-13** · `v0.1.0` → `v0.4.0` (+ `v0.1.0-py`) · Verificado `git tag`.
 
 ---
 
@@ -11,6 +11,7 @@
 
 | Versión | Git tag | Fecha (git) | Fecha (registry) | Registry | Resumen |
 |---------|---------|-------------|------------------|----------|---------|
+| **0.4.0** | `v0.4.0` | 2026-09-13 | ⏳ pendiente (publish manual) | npm | sayay-009: local coding agents (burn-rate, step, loop + claude-code/opencode/mcp) |
 | **0.3.0** | `v0.3.0` | 2026-08-14 | 2026-08-15 01:31 UTC | npm | `SayayQhawayPlugin` → Qhaway metrics |
 | **0.2.0** | `v0.2.0` | 2026-08-02 | 2026-08-02 21:30 UTC | npm | `TokenBudgetExceededException` + Dynamo + CloudWatch |
 | **0.1.0** (PyPI) | `v0.1.0-py` | 2026-07-31 | 2026-07-31 ~19:15 UTC | PyPI | Python SDK `sayay 0.1.0` · Memory/File/Redis |
@@ -18,6 +19,34 @@
 | **0.1.0** | `v0.1.0` | 2026-07-22 | 2026-07-22 23:31 UTC | npm | Initial: 308 líneas, zero deps, budgets por user |
 
 > Nota: `v0.2.0` faltaba en `git ls-remote` hasta 2026-08-25 — pusheado con `v0.1.1`.
+
+---
+
+## v0.4.0 — 2026-09-13 — Local Coding Agents Guard (sayay-009)
+
+**Tag:** `v0.4.0` @ `0081f4b` · **npm:** `0.4.0` ⏳ pendiente (publish manual con OTP) · SoW: `sayay-009-local-coding-agents`
+
+**Qué cambió:**
+- Core `src/index.ts`: `burnRateUsdPerMin` (velocity guard, ventana 5 min) + `perStepCapUsd`
+  (`beginStep`/`endStep`, `getUsage(userId, { stepId })`) + `maxLoopRepeats`
+  (`trackLoop(userId, fingerprint)`) + `FileStorage` (ledger JSON local) + clock inyectable
+- Adapters `src/adapters/`: `claude-code.ts` (`ClaudeCodeGuard`, transcript JSONL → session
+  cost, delta-ledger, halt exit 2, subagent fan-out cap) · `opencode.ts`
+  (`createSayayOpenCodePlugin`: `chat.message` record + `tool.execute.before` gate) ·
+  `mcp.ts` (`SayayMcpServer` stdio JSON-RPC zero-deps: `budget_check`/`budget_record`/`budget_summary`)
+- Bins: `sayay-claude-code` + `sayay-mcp` · subpaths `./claude-code` `./opencode` `./mcp`
+- 44/44 tests (core burn/step/loop/FileStorage + adapters) · smoke E2E stdio + hooks OK
+- Docs `docs/local-agents.md` + `examples/claude-code/` + `examples/opencode/plugin.ts`
+
+**Por qué importa:**
+- Lleva la gradación warn→degrade→block a los **local coding agents** (Claude Code, opencode,
+  MCP) donde el token bill es el problema #1 del dev — cortar loops y velocity antes de que ardan.
+- Trío de loops (2026-09-13): sayay-009 = **cortador** junto a tinkuy-012 (ejecutor) + S086 (consumidor).
+
+```bash
+SAYAY_BUDGET_DAILY=5 npx sayay-mcp          # MCP server (Cursor/Zed/custom)
+sayay-claude-code                           # Claude Code hook (exit 2 = halt)
+```
 
 ---
 
