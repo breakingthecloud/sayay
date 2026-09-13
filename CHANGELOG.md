@@ -11,7 +11,7 @@
 
 | Versión | Git tag | Fecha (git) | Fecha (registry) | Registry | Resumen |
 |---------|---------|-------------|------------------|----------|---------|
-| **0.4.0** | `v0.4.0` | 2026-09-13 | ⏳ pendiente (publish manual) | npm | sayay-009: local coding agents (burn-rate, step, loop + claude-code/opencode/mcp) |
+| **0.4.0** | `v0.4.0` | 2026-09-13 | 2026-09-13 20:03 UTC | npm | sayay-009: local coding agents (burn-rate, step, loop + claude-code/opencode/mcp) |
 | **0.3.0** | `v0.3.0` | 2026-08-14 | 2026-08-15 01:31 UTC | npm | `SayayQhawayPlugin` → Qhaway metrics |
 | **0.2.0** | `v0.2.0` | 2026-08-02 | 2026-08-02 21:30 UTC | npm | `TokenBudgetExceededException` + Dynamo + CloudWatch |
 | **0.1.0** (PyPI) | `v0.1.0-py` | 2026-07-31 | 2026-07-31 ~19:15 UTC | PyPI | Python SDK `sayay 0.1.0` · Memory/File/Redis |
@@ -24,7 +24,7 @@
 
 ## v0.4.0 — 2026-09-13 — Local Coding Agents Guard (sayay-009)
 
-**Tag:** `v0.4.0` @ `0081f4b` · **npm:** `0.4.0` ⏳ pendiente (publish manual con OTP) · SoW: `sayay-009-local-coding-agents`
+**Tag:** `v0.4.0` @ `0081f4b` · **npm:** `0.4.0` @ 2026-09-13T20:03:10.721Z · SoW: `sayay-009-local-coding-agents`
 
 **Qué cambió:**
 - Core `src/index.ts`: `burnRateUsdPerMin` (velocity guard, ventana 5 min) + `perStepCapUsd`
