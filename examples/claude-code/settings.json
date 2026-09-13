@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "SessionStart": "sayay-claude-code",
+    "UserPromptSubmit": "sayay-claude-code",
+    "PostToolBatch": "sayay-claude-code",
+    "PreCompact": "sayay-claude-code",
+    "PreToolUse": "sayay-claude-code"
+  }
+}

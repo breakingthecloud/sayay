@@ -9,10 +9,27 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
+    },
+    "./claude-code": {
+      "types": "./dist/adapters/claude-code.d.ts",
+      "import": "./dist/adapters/claude-code.js"
+    },
+    "./opencode": {
+      "types": "./dist/adapters/opencode.d.ts",
+      "import": "./dist/adapters/opencode.js"
+    },
+    "./mcp": {
+      "types": "./dist/adapters/mcp.d.ts",
+      "import": "./dist/adapters/mcp.js"
     }
   },
+  "bin": {
+    "sayay-claude-code": "bin/sayay-claude-code.mjs",
+    "sayay-mcp": "bin/sayay-mcp.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc",

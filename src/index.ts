@@ -28,6 +28,22 @@ export interface SayayBudget {
   credits?: number;
   /** Credit cost per call (default: 1) */
   creditsPerCall?: number;
+  /** Velocity guard: max average USD per minute over a rolling window (default 5 min). */
+  burnRateUsdPerMin?: number;
+  /** Max USD a single step (batch of tool calls between user prompts) may spend. */
+  perStepCapUsd?: number;
+  /** Loop guard: block when the same error fingerprint repeats this many times. */
+  maxLoopRepeats?: number;
+}
+
+export interface SayayCheckOptions {
+  /** Step id from `beginStep()` — enables the per-step cap for this call. */
+  stepId?: string;
+}
+
+export interface SayayRecordOptions {
+  /** Step id from `beginStep()` — charges this call against the step bucket. */
+  stepId?: string;
 }
 
 export interface SayayConfig {
@@ -51,6 +67,10 @@ export interface SayayConfig {
    * Config: `{ metricNamespace?: string; region?: string }`
    */
   cloudWatch?: { metricNamespace?: string; region?: string };
+  /** Minutes used for the burn-rate window (default: 5). */
+  burnRateWindowMinutes?: number;
+  /** Clock provider (default: `new Date`). Inject for deterministic tests. */
+  now?: () => Date;
 }
 
 export interface SayayDecision {
@@ -73,6 +93,12 @@ export interface SayayUsage {
   monthly: number;
   session: number;
   credits?: number;
+  /** Current spend on an active step (only when a stepId is passed to getUsage). */
+  step?: number;
+  /** Average USD/min over the burn-rate window (when burnRateUsdPerMin is set). */
+  burnRate?: number;
+  /** Repeats of the last tracked loop fingerprint. */
+  loopRepeats?: number;
 }
 
 // ─── Storage Interface ──────────────────────────────────────────────────
@@ -176,7 +202,70 @@ export class MemoryStorage implements SayayStorage {
   }
 }
 
-// ─── DynamoDB Storage ───────────────────────────────────────────────────
+// ─── File Storage (local CLI agents) ──────────────────────────────────────
+
+interface FileEntry {
+  value: number;
+  expires?: number;
+}
+
+/**
+ * JSON-file backed `SayayStorage` for local CLI agents (Claude Code, opencode)
+ * and the `sayay-mcp` server. Persists across restarts; zero dependencies
+ * (node:fs is lazy-imported so Workers bundlers never see it).
+ */
+export class FileStorage implements SayayStorage {
+  private data: Record<string, FileEntry> = {};
+
+  constructor(private readonly filePath: string) {}
+
+  private async load(): Promise<Record<string, FileEntry>> {
+    try {
+      const { readFileSync } = await import('node:fs');
+      const raw = readFileSync(this.filePath, 'utf8');
+      this.data = JSON.parse(raw) as Record<string, FileEntry>;
+    } catch {
+      this.data = {};
+    }
+    return this.data;
+  }
+
+  private async persist(): Promise<void> {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    const { dirname } = await import('node:path');
+    mkdirSync(dirname(this.filePath), { recursive: true });
+    writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf8');
+  }
+
+  async get(key: string): Promise<number> {
+    const data = await this.load();
+    const entry = data[key];
+    if (!entry) return 0;
+    if (entry.expires && Date.now() > entry.expires) {
+      delete data[key];
+      await this.persist();
+      return 0;
+    }
+    return entry.value;
+  }
+
+  async increment(key: string, amount: number, ttlSeconds?: number): Promise<number> {
+    const current = await this.get(key);
+    const next = current + amount;
+    this.data[key] = {
+      value: next,
+      expires: ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined,
+    };
+    await this.persist();
+    return next;
+  }
+
+  async reset(key: string): Promise<void> {
+    await this.load();
+    delete this.data[key];
+    await this.persist();
+  }
+}
 
 export interface DynamoStorageOptions {
   /** DynamoDB table name */
@@ -286,22 +375,30 @@ export class DynamoStorage implements SayayStorage {
 // ─── Guard ──────────────────────────────────────────────────────────────
 
 export class SayayGuard {
-  private config: SayayConfig & { onExceeded: SayayAction; warnThreshold: number; degradeThreshold: number };
+  private config: SayayConfig & {
+    onExceeded: SayayAction;
+    warnThreshold: number;
+    degradeThreshold: number;
+    burnRateWindowMinutes: number;
+  };
+  private readonly clock: () => Date;
 
   constructor(config: SayayConfig) {
     this.config = {
       onExceeded: 'block',
       warnThreshold: 80,
       degradeThreshold: 95,
+      burnRateWindowMinutes: 5,
       ...config,
     };
+    this.clock = config.now || (() => new Date());
   }
 
   /**
    * Check if a user can make an LLM call.
    * Call this BEFORE each inference request.
    */
-  async check(userId: string, estimatedCostUsd?: number): Promise<SayayDecision> {
+  async check(userId: string, estimatedCostUsd?: number, options?: SayayCheckOptions): Promise<SayayDecision> {
     const { budget, storage } = this.config;
     const cost = estimatedCostUsd || 0;
 
@@ -330,6 +427,37 @@ export class SayayGuard {
     // Per-call max
     if (budget.perCallMaxUsd && cost > budget.perCallMaxUsd) {
       return this.decide(userId, 'block', 0, budget.perCallMaxUsd, `Single call $${cost.toFixed(4)} exceeds per-call max $${budget.perCallMaxUsd}`);
+    }
+
+    // Per-step cap (local coding agents: batch of tool calls between user prompts)
+    if (budget.perStepCapUsd && options?.stepId) {
+      const stepSpent = await storage.get(this.stepKey(userId, options.stepId));
+      const remaining = budget.perStepCapUsd - stepSpent;
+      if (cost > remaining) {
+        return this.decide(userId, 'block', remaining, budget.perStepCapUsd, `Step would exceed cap: $${cost.toFixed(4)} spent on $${budget.perStepCapUsd.toFixed(4)} step`);
+      }
+      const usagePercent = (stepSpent / budget.perStepCapUsd) * 100;
+      if (usagePercent >= this.config.degradeThreshold) {
+        return this.decide(userId, 'degrade', remaining, budget.perStepCapUsd, `${Math.round(usagePercent)}% step budget used`);
+      }
+      if (usagePercent >= this.config.warnThreshold) {
+        return this.decide(userId, 'warn', remaining, budget.perStepCapUsd, `${Math.round(usagePercent)}% step budget used`);
+      }
+    }
+
+    // Burn rate / velocity guard
+    if (budget.burnRateUsdPerMin) {
+      const rate = await this.currentBurnRate(userId);
+      if (rate > budget.burnRateUsdPerMin) {
+        return this.decide(userId, this.config.onExceeded, budget.burnRateUsdPerMin - rate, budget.burnRateUsdPerMin, `Burn rate $${rate.toFixed(4)}/min exceeds limit $${budget.burnRateUsdPerMin.toFixed(4)}/min`);
+      }
+      const ratePercent = (rate / budget.burnRateUsdPerMin) * 100;
+      if (ratePercent >= this.config.degradeThreshold) {
+        return this.decide(userId, 'degrade', budget.burnRateUsdPerMin - rate, budget.burnRateUsdPerMin, `${Math.round(ratePercent)}% of burn-rate limit`);
+      }
+      if (ratePercent >= this.config.warnThreshold) {
+        return this.decide(userId, 'warn', budget.burnRateUsdPerMin - rate, budget.burnRateUsdPerMin, `${Math.round(ratePercent)}% of burn-rate limit`);
+      }
     }
 
     // Daily budget
@@ -372,7 +500,7 @@ export class SayayGuard {
     }
 
     // All checks passed
-    const total = budget.dailyUsd || budget.monthlyUsd || 0;
+    const total = budget.dailyUsd || budget.monthlyUsd || budget.sessionUsd || budget.burnRateUsdPerMin || 0;
     return this.decide(userId, 'allow', total, total);
   }
 
@@ -402,7 +530,7 @@ export class SayayGuard {
    * Record actual cost after an LLM call completes.
    * Call this AFTER each inference request.
    */
-  async record(userId: string, costUsd: number, creditsUsed?: number): Promise<void> {
+  async record(userId: string, costUsd: number, creditsUsed?: number, options?: SayayRecordOptions): Promise<void> {
     const { budget, storage } = this.config;
 
     if (budget.credits !== undefined) {
@@ -423,19 +551,67 @@ export class SayayGuard {
     if (budget.sessionUsd) {
       await storage.increment(this.key(userId, 'session'), costUsd);
     }
+
+    // Burn-rate buckets (rolling minute window, TTL expires old minutes)
+    if (budget.burnRateUsdPerMin) {
+      const ttl = (this.config.burnRateWindowMinutes + 1) * 60;
+      await storage.increment(this.burnKey(userId, this.clock()), costUsd, ttl);
+    }
+
+    // Step bucket
+    if (budget.perStepCapUsd && options?.stepId) {
+      await storage.increment(this.stepKey(userId, options.stepId), costUsd);
+    }
   }
 
   /**
    * Get current usage for a user.
    */
-  async getUsage(userId: string): Promise<SayayUsage> {
+  async getUsage(userId: string, options?: { stepId?: string }): Promise<SayayUsage> {
     const { storage, budget } = this.config;
-    return {
+    const usage: SayayUsage = {
       daily: await storage.get(this.key(userId, 'daily')),
       monthly: await storage.get(this.key(userId, 'monthly')),
       session: await storage.get(this.key(userId, 'session')),
       credits: budget.credits !== undefined ? await storage.get(this.key(userId, 'credits')) : undefined,
     };
+    if (options?.stepId) {
+      usage.step = await storage.get(this.stepKey(userId, options.stepId));
+    }
+    if (budget.burnRateUsdPerMin) {
+      usage.burnRate = await this.currentBurnRate(userId);
+    }
+    return usage;
+  }
+
+  /**
+   * Open a new step bucket for a user. Charge calls to it with
+   * `check(userId, cost, { stepId })` + `record(userId, cost, undefined, { stepId })`
+   * and close it with `endStep(userId, stepId)`.
+   */
+  beginStep(userId: string): string {
+    const stamp = this.clock().toISOString();
+    return `step-${stamp}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /** Close a step bucket (reset its spend to 0). */
+  async endStep(userId: string, stepId: string): Promise<void> {
+    await this.config.storage.reset(this.stepKey(userId, stepId));
+  }
+
+  /**
+   * Loop guard: report an error fingerprint (e.g. hash of a stack trace / tool
+   * output). Returns a `block` decision once the same fingerprint repeats more
+   * than `budget.maxLoopRepeats` times, otherwise `allow`. Fingerprints expire
+   * after an hour so stale loops never leak counters.
+   */
+  async trackLoop(userId: string, fingerprint: string): Promise<SayayDecision> {
+    const { budget, storage } = this.config;
+    const repeats = await storage.increment(this.loopKey(userId, fingerprint), 1, 3600);
+    if (budget.maxLoopRepeats !== undefined && repeats > budget.maxLoopRepeats) {
+      return this.decide(userId, 'block', 0, budget.maxLoopRepeats, `Repeated failure detected (${repeats - 1} repeats of same fingerprint)`);
+    }
+    return this.decide(userId, 'allow', budget.maxLoopRepeats !== undefined ? budget.maxLoopRepeats - repeats : repeats, budget.maxLoopRepeats ?? repeats);
   }
 
   /**
@@ -456,10 +632,33 @@ export class SayayGuard {
   // ─── Private ────────────────────────────────────────────────────────
 
   private key(userId: string, scope: string): string {
-    const date = new Date();
+    const date = this.clock();
     if (scope === 'daily') return `sayay:${userId}:daily:${date.toISOString().split('T')[0]}`;
     if (scope === 'monthly') return `sayay:${userId}:monthly:${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     return `sayay:${userId}:${scope}`;
+  }
+
+  private stepKey(userId: string, stepId: string): string {
+    return `sayay:${userId}:step:${stepId}`;
+  }
+
+  private loopKey(userId: string, fingerprint: string): string {
+    return `sayay:${userId}:loop:${fingerprint}`;
+  }
+
+  private burnKey(userId: string, date: Date): string {
+    return `sayay:${userId}:burn:${date.toISOString().slice(0, 16)}`;
+  }
+
+  private async currentBurnRate(userId: string): Promise<number> {
+    const { storage } = this.config;
+    const window = this.config.burnRateWindowMinutes;
+    let sum = 0;
+    for (let i = 0; i < window; i++) {
+      const d = new Date(this.clock().getTime() - i * 60_000);
+      sum += await storage.get(this.burnKey(userId, d));
+    }
+    return sum / window;
   }
 
   private decide(userId: string, action: SayayAction, remaining: number, total: number, reason?: string): SayayDecision {
@@ -533,7 +732,7 @@ export class SayayGuard {
   }
 
   private secondsUntilMidnightUTC(): number {
-    const now = new Date();
+    const now = this.clock();
     const midnight = new Date(now);
     midnight.setUTCDate(midnight.getUTCDate() + 1);
     midnight.setUTCHours(0, 0, 0, 0);
@@ -541,7 +740,7 @@ export class SayayGuard {
   }
 
   private secondsUntilEndOfMonth(): number {
-    const now = new Date();
+    const now = this.clock();
     const endOfMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
     return Math.floor((endOfMonth.getTime() - now.getTime()) / 1000);
   }
