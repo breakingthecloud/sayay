@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { join } from 'node:path';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
   BudgetExceededError,
   TokenBudgetExceededException,
   SayayGuard,
   MemoryStorage,
+  FileStorage,
   DynamoStorage,
 } from './index.js';
 
@@ -148,3 +152,152 @@ describe('DynamoStorage', () => {
     await expect(guard.checkOrThrow('u1')).resolves.toMatchObject({ action: 'allow' });
   });
 });
+
+describe('Burn rate / velocity guard', () => {
+  it('blocks when average USD/min exceeds the limit over the window', async () => {
+    const now = new Date('2026-09-06T12:00:00Z');
+    const guard = new SayayGuard({
+      storage: new MemoryStorage(),
+      budget: { burnRateUsdPerMin: 1 },
+      burnRateWindowMinutes: 3,
+      now: () => now,
+    });
+    await guard.record('u1', 6);
+    const decision = await guard.check('u1');
+    expect(decision.action).toBe('block');
+    expect(decision.reason).toContain('2.0000/min');
+  });
+
+  it('allows when under the limit', async () => {
+    const now = new Date('2026-09-06T12:00:00Z');
+    const guard = new SayayGuard({
+      storage: new MemoryStorage(),
+      budget: { burnRateUsdPerMin: 10 },
+      burnRateWindowMinutes: 3,
+      now: () => now,
+    });
+    await guard.record('u1', 6);
+    const decision = await guard.check('u1');
+    expect(decision.action).toBe('allow');
+    expect(decision.total).toBe(10);
+  });
+
+  it('decays as old minutes fall out of the window', async () => {
+    let now = new Date('2026-09-06T12:00:00Z');
+    const guard = new SayayGuard({
+      storage: new MemoryStorage(),
+      budget: { burnRateUsdPerMin: 1 },
+      burnRateWindowMinutes: 3,
+      now: () => now,
+    });
+    await guard.record('u1', 6);
+    expect((await guard.check('u1')).action).toBe('block');
+
+    now = new Date('2026-09-06T12:01:00Z');
+    now = new Date('2026-09-06T12:02:00Z');
+    now = new Date('2026-09-06T12:03:00Z');
+    const decision = await guard.check('u1');
+    expect(decision.action).toBe('allow');
+  });
+
+  it('reports burnRate in getUsage', async () => {
+    const now = new Date('2026-09-06T12:00:00Z');
+    const guard = new SayayGuard({
+      storage: new MemoryStorage(),
+      budget: { burnRateUsdPerMin: 10 },
+      burnRateWindowMinutes: 2,
+      now: () => now,
+    });
+    await guard.record('u1', 4);
+    const usage = await guard.getUsage('u1');
+    expect(usage.burnRate).toBeCloseTo(2, 5);
+  });
+});
+
+describe('Per-step cap', () => {
+  it('blocks when a call would exceed the step cap', async () => {
+    const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { perStepCapUsd: 1 } });
+    const stepId = guard.beginStep('u1');
+    expect((await guard.check('u1', 0.6, { stepId })).action).toBe('allow');
+    await guard.record('u1', 0.6, undefined, { stepId });
+    expect((await guard.check('u1', 0.6, { stepId })).action).toBe('block');
+  });
+
+  it('endStep resets the step bucket', async () => {
+    const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { perStepCapUsd: 1 } });
+    const stepId = guard.beginStep('u1');
+    await guard.record('u1', 0.8, undefined, { stepId });
+    expect((await guard.check('u1', 0.6, { stepId })).action).toBe('block');
+    await guard.endStep('u1', stepId);
+    expect((await guard.check('u1', 0.6, { stepId })).action).toBe('allow');
+  });
+
+  it('step usage is independent per user and step', async () => {
+    const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { perStepCapUsd: 2 } });
+    const s1 = guard.beginStep('u1');
+    const s2 = guard.beginStep('u2');
+    await guard.record('u1', 1.5, undefined, { stepId: s1 });
+    expect((await guard.check('u1', 1, { stepId: s1 })).action).toBe('block');
+    expect((await guard.check('u2', 1, { stepId: s2 })).action).toBe('allow');
+    const usage = await guard.getUsage('u1', { stepId: s1 });
+    expect(usage.step).toBeCloseTo(1.5, 5);
+  });
+});
+
+describe('Loop detection', () => {
+  it('blocks after maxLoopRepeats of the same fingerprint', async () => {
+    const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { maxLoopRepeats: 2 } });
+    const fp = 'a1b2c3';
+    expect((await guard.trackLoop('u1', fp)).action).toBe('allow');
+    expect((await guard.trackLoop('u1', fp)).action).toBe('allow');
+    expect((await guard.trackLoop('u1', fp)).action).toBe('block');
+  });
+
+  it('is scoped per user', async () => {
+    const guard = new SayayGuard({ storage: new MemoryStorage(), budget: { maxLoopRepeats: 2 } });
+    const fp = 'a1b2c3';
+    await guard.trackLoop('u1', fp);
+    await guard.trackLoop('u1', fp);
+    expect((await guard.trackLoop('u1', fp)).action).toBe('block');
+    expect((await guard.trackLoop('u2', fp)).action).toBe('allow');
+  });
+});
+
+describe('FileStorage', () => {
+  it('persists across instances', async () => {
+    const dir = mkdtemp();
+    const path = join(dir, 'ledger.json');
+    const a = new FileStorage(path);
+    await a.increment('k', 3);
+    const b = new FileStorage(path);
+    await expect(b.get('k')).resolves.toBe(3);
+    await b.increment('k', 2);
+    await expect(a.get('k')).resolves.toBe(5);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('expires ttl entries', async () => {
+    const dir = mkdtemp();
+    const path = join(dir, 'ledger.json');
+    const storage = new FileStorage(path);
+    await storage.increment('k', 1, 1);
+    await expect(storage.get('k')).resolves.toBe(1);
+    await new Promise((r) => setTimeout(r, 1100));
+    await expect(storage.get('k')).resolves.toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reset removes the key', async () => {
+    const dir = mkdtemp();
+    const path = join(dir, 'ledger.json');
+    const storage = new FileStorage(path);
+    await storage.increment('k', 4);
+    await storage.reset('k');
+    await expect(storage.get('k')).resolves.toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+function mkdtemp(): string {
+  return join(tmpdir(), `sayay-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+}
