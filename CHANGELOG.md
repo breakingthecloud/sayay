@@ -11,7 +11,7 @@
 
 | Versión | Git tag | Fecha (git) | Fecha (registry) | Registry | Resumen |
 |---------|---------|-------------|------------------|----------|---------|
-| **0.5.0** | `v0.5.0` | 2026-09-13 | ⏳ pendiente (publish manual) | npm | sayay-010: cloud runtimes (KV/D1/Redis storage, agents-cf, langchain, bedrock) |
+| **0.5.0** | `v0.5.0` | 2026-09-13 | 2026-09-14 02:25 UTC | npm | sayay-010: cloud runtimes (KV/D1/Redis storage, agents-cf, langchain, bedrock) |
 | **0.4.0** | `v0.4.0` | 2026-09-13 | 2026-09-13 20:03 UTC | npm | sayay-009: local coding agents (burn-rate, step, loop + claude-code/opencode/mcp) |
 | **0.3.0** | `v0.3.0` | 2026-08-14 | 2026-08-15 01:31 UTC | npm | `SayayQhawayPlugin` → Qhaway metrics |
 | **0.2.0** | `v0.2.0` | 2026-08-02 | 2026-08-02 21:30 UTC | npm | `TokenBudgetExceededException` + Dynamo + CloudWatch |
@@ -25,7 +25,7 @@
 
 ## v0.5.0 — 2026-09-13 — Cloud Runtime Adapters (sayay-010)
 
-**Tag:** `v0.5.0` @ `13e1911` · **npm:** `0.5.0` ⏳ pendiente (publish manual con OTP) · SoW: `sayay-010-cloud-runtime-adapters`
+**Tag:** `v0.5.0` @ `13e1911` · **npm:** `0.5.0` @ 2026-09-14T02:25:15.396Z · SoW: `sayay-010-cloud-runtime-adapters`
 
 **Qué cambió:**
 - Storage `src/storage/` (subpath `./storage`): `KVStorage` (Cloudflare KV, TTL keys) ·
