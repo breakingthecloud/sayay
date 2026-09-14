@@ -3,7 +3,7 @@
 > Historial público de releases de [`@carloscortezcloud/sayay-guard`](https://www.npmjs.com/package/@carloscortezcloud/sayay-guard) (npm) y `sayay` (PyPI) — 1 entrada por versión.
 > Repo: https://github.com/breakingthecloud/sayay · Python: `sayay` · Ejemplos: `examples/` + `python/examples/`
 
-Última actualización: **2026-09-13** · `v0.1.0` → `v0.4.0` (+ `v0.1.0-py`) · Verificado `git tag`.
+Última actualización: **2026-09-13** · `v0.1.0` → `v0.5.0` (+ `v0.1.0-py`) · Verificado `git tag`.
 
 ---
 
@@ -11,6 +11,7 @@
 
 | Versión | Git tag | Fecha (git) | Fecha (registry) | Registry | Resumen |
 |---------|---------|-------------|------------------|----------|---------|
+| **0.5.0** | `v0.5.0` | 2026-09-13 | ⏳ pendiente (publish manual) | npm | sayay-010: cloud runtimes (KV/D1/Redis storage, agents-cf, langchain, bedrock) |
 | **0.4.0** | `v0.4.0` | 2026-09-13 | 2026-09-13 20:03 UTC | npm | sayay-009: local coding agents (burn-rate, step, loop + claude-code/opencode/mcp) |
 | **0.3.0** | `v0.3.0` | 2026-08-14 | 2026-08-15 01:31 UTC | npm | `SayayQhawayPlugin` → Qhaway metrics |
 | **0.2.0** | `v0.2.0` | 2026-08-02 | 2026-08-02 21:30 UTC | npm | `TokenBudgetExceededException` + Dynamo + CloudWatch |
@@ -19,6 +20,33 @@
 | **0.1.0** | `v0.1.0` | 2026-07-22 | 2026-07-22 23:31 UTC | npm | Initial: 308 líneas, zero deps, budgets por user |
 
 > Nota: `v0.2.0` faltaba en `git ls-remote` hasta 2026-08-25 — pusheado con `v0.1.1`.
+
+---
+
+## v0.5.0 — 2026-09-13 — Cloud Runtime Adapters (sayay-010)
+
+**Tag:** `v0.5.0` @ `13e1911` · **npm:** `0.5.0` ⏳ pendiente (publish manual con OTP) · SoW: `sayay-010-cloud-runtime-adapters`
+
+**Qué cambió:**
+- Storage `src/storage/` (subpath `./storage`): `KVStorage` (Cloudflare KV, TTL keys) ·
+  `D1Storage` (SQLite Workers, upsert atómico + `expires`) · `RedisStorage`
+  (`incrbyfloat`/`incrby` + `expire`)
+- Adapters: `./agents-cf` (`SayayAgentsPlugin` + `withSayayBudget` sobre `onModelCall`) ·
+  `./langchain` (`createSayayCallbackHandler`, duck-typed zero-deps) ·
+  `./bedrock` (`createGuardedBedrock` → `guardedInvoke`)
+- `docs/guides/runtimes.md` — CF Agents SDK / Bedrock / LangChain / Lambda / K8s in-process
+- 59/59 tests (storage mocks + cloud adapters) · smoke subpaths OK
+
+**Por qué importa:**
+- Cierra el refocus de sayay-008: el guard core llega a los **runtimes cloud de agentes**
+  (Cloudflare Agents SDK, Bedrock AgentCore, LangChain) con la gradación
+  warn→degrade→block que los gateways no dan. LiteLLM ⛔ no duplicar.
+
+```ts
+import { KVStorage } from '@carloscortezcloud/sayay-guard/storage';
+import { withSayayBudget, SayayAgentsPlugin } from '@carloscortezcloud/sayay-guard/agents-cf';
+import { createGuardedBedrock } from '@carloscortezcloud/sayay-guard/bedrock';
+```
 
 ---
 
