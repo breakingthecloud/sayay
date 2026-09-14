@@ -21,6 +21,22 @@
     "./mcp": {
       "types": "./dist/adapters/mcp.d.ts",
       "import": "./dist/adapters/mcp.js"
+    },
+    "./agents-cf": {
+      "types": "./dist/adapters/agents-cf.d.ts",
+      "import": "./dist/adapters/agents-cf.js"
+    },
+    "./langchain": {
+      "types": "./dist/adapters/langchain.d.ts",
+      "import": "./dist/adapters/langchain.js"
+    },
+    "./bedrock": {
+      "types": "./dist/adapters/bedrock.d.ts",
+      "import": "./dist/adapters/bedrock.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
     }
   },
   "bin": {
