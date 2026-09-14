@@ -1,6 +1,6 @@
 {
   "name": "@carloscortezcloud/sayay-guard",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "AI agent cost guardrails. Budget enforcement per user/session. Block, degrade, or warn before LLM calls exceed limits.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
